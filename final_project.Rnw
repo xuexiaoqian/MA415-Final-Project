@@ -1,0 +1,679 @@
+\documentclass{article}
+
+\begin{document}
+\SweaveOpts{concordance=TRUE}
+
+library(devtools)
+library(twitteR)
+library(ROAuth)
+api_key <- "zwmo2nKieK0RGVoFMP9KfGci9"
+api_secret <- "Az0OyiiUDyWJlCwnZtEBJxRKLNJIZ4FqOPyUvyDNqUM7Ko2lUr"
+access_token <- "2809402781-RQuIDNFLL1dg5i3xETd1W3t8Kol9ZVqufMrgsRf"
+access_token_secret <- "q5s33WockcM1JdwLyxJmQP9zGv3B0ilzYXmnYF8TMAN0q"
+setup_twitter_oauth(api_key, api_secret, access_token, access_token_secret)
+# [1] "Using direct authentication"
+# Use a local file ('.httr-oauth'), to cache OAuth access credentials between R sessions?
+# 
+# 1: Yes
+# 2: No
+# 
+# Selection: 1
+# Adding .httr-oauth to .gitignore
+
+# search "Starbucks" on Twitter
+s <- searchTwitter("@starbucks OR #starbucks", n=2000, lang="en")
+# search hashtags "StarbucksForLife" on Twitter
+s2 <- searchTwitter("#starbucksforlife", n=1000, lang="en")
+# search hashtags "StarbucksAtHome" on Twitter
+s3 <- searchTwitter("#starbucksathome", n=1000, lang="en")
+# search hashtags "StarbucksHoliday" on Twitter
+s4 <- searchTwitter("#givegood", n=1000, lang="en")
+# save results
+saveRDS(s,"starbucks.rds")
+saveRDS(s2,"slife.rds")
+saveRDS(s3,"shome.rds")
+saveRDS(s4,"sgive.rds")
+
+# clean the data
+tweetFrame <- twListToDF(s) 
+tweetFrame1 <- twListToDF(s2) 
+tweetFrame2 <- twListToDF(s3) 
+tweetFrame3 <- twListToDF(s4) 
+write.csv(tweetFrame, file = "starbucks.csv")
+write.csv(tweetFrame1, file = "slife.csv")
+write.csv(tweetFrame2, file = "shome.csv")
+write.csv(tweetFrame3, file = "sgive.csv")
+
+# build a corpus, and specify the source to be character vectors 
+library(tm)
+t <- Corpus(VectorSource(tweetFrame$text))
+t1 <- Corpus(VectorSource(tweetFrame1$text))
+t2 <- Corpus(VectorSource(tweetFrame2$text))
+t3 <- Corpus(VectorSource(tweetFrame3$text))
+
+# remove URLs
+removeURL <- function(x) gsub("http[^[:space:]]*", "", x)
+t <- tm_map(t, content_transformer(removeURL))
+t1 <- tm_map(t1, content_transformer(removeURL))
+t2 <- tm_map(t2, content_transformer(removeURL))
+t3 <- tm_map(t3, content_transformer(removeURL))
+
+# remove anything other than English letters or space remove
+removeNumPunct <- function(x) gsub("[^[:alpha:][:space:]]*", "", x) 
+t <- tm_map(s, content_transformer(removeNumPunct))
+t1 <- tm_map(t1, content_transformer(removeNumPunct))
+t2 <- tm_map(t2, content_transformer(removeNumPunct))
+t3 <- tm_map(t3, content_transformer(removeNumPunct))
+
+# remove stopwords
+myStopwords <- c(setdiff(stopwords('english'), c("starbucks","life","home","give","good")))
+t <- tm_map(t, removeWords, myStopwords)
+t1 <- tm_map(t1, removeWords, myStopwords)
+t2 <- tm_map(t2, removeWords, myStopwords)
+t3 <- tm_map(t3, removeWords, myStopwords)
+
+# remove extra whitespace
+t <- tm_map(t, stripWhitespace)
+t1 <- tm_map(t1, stripWhitespace)
+t2 <- tm_map(t2, stripWhitespace)
+t3 <- tm_map(t3, stripWhitespace)
+
+# convert to lower case
+t <- tm_map(t, content_transformer(tolower))
+t1 <- tm_map(t1, content_transformer(tolower))
+t2 <- tm_map(t2, content_transformer(tolower))
+t3 <- tm_map(t3, content_transformer(tolower))
+
+# Build Term Document Matrix
+tdm <- TermDocumentMatrix(t,control = list(wordLengths = c(1, Inf)))
+tdm1 <- TermDocumentMatrix(t1,control = list(wordLengths = c(1, Inf)))
+tdm2 <- TermDocumentMatrix(t2,control = list(wordLengths = c(1, Inf)))
+tdm3 <- TermDocumentMatrix(t3,control = list(wordLengths = c(1, Inf)))
+tdm
+tdm1
+tdm2
+tdm3
+
+# inspect frequent words
+freq.terms <- findFreqTerms(tdm, lowfreq = 80)
+freq.terms <- findFreqTerms(tdm1, lowfreq = 50)
+freq.terms <- findFreqTerms(tdm2, lowfreq = 5)
+freq.terms <- findFreqTerms(tdm3, lowfreq = 50)
+term.freq <- rowSums(as.matrix(tdm))
+term1.freq <- rowSums(as.matrix(tdm1))
+term2.freq <- rowSums(as.matrix(tdm2))
+term3.freq <- rowSums(as.matrix(tdm3))
+term.freq <- subset(term.freq, term.freq >= 80)
+term1.freq <- subset(term1.freq, term1.freq >= 50)
+term2.freq <- subset(term2.freq, term2.freq >= 5)
+term3.freq <- subset(term3.freq, term3.freq >= 50)
+df <- data.frame(term = names(term.freq), freq = term.freq)
+df1 <- data.frame(term = names(term1.freq), freq = term1.freq)
+df2 <- data.frame(term = names(term2.freq), freq = term2.freq)
+df3 <- data.frame(term = names(term3.freq), freq = term3.freq)
+
+# plot the frequent words
+library(ggplot2)
+ggplot(df, aes(x=term, y=freq)) + geom_bar(stat = "identity") + xlab ("Terms") + ylab("Count") + coord_flip() + theme(axis.text=element_text(size=7))
+ggplot(df1, aes(x=term, y=freq)) + geom_bar(stat = "identity") + xlab ("Terms") + ylab("Count") + coord_flip() + theme(axis.text=element_text(size=7))
+ggplot(df2, aes(x=term, y=freq)) + geom_bar(stat = "identity") + xlab ("Terms") + ylab("Count") + coord_flip() + theme(axis.text=element_text(size=7))
+ggplot(df3, aes(x=term, y=freq)) + geom_bar(stat = "identity") + xlab ("Terms") + ylab("Count") + coord_flip() + theme(axis.text=element_text(size=7))
+
+# Build word cloud
+library(RColorBrewer)
+library(wordcloud)
+m <- as.matrix(tdm)
+m1 <- as.matrix(tdm1)
+m2 <- as.matrix(tdm2)
+m3 <- as.matrix(tdm3)
+word_freqs <- sort(rowSums(m), decreasing = T)
+word_freqs1 <- sort(rowSums(m1), decreasing = T)
+word_freqs2 <- sort(rowSums(m2), decreasing = T)
+word_freqs3 <- sort(rowSums(m3), decreasing = T)
+dm <- data.frame(word=names(word_freqs),freq=word_freqs)
+dm1 <- data.frame(word=names(word_freqs1),freq=word_freqs1)
+dm2 <- data.frame(word=names(word_freqs2),freq=word_freqs2)
+dm3 <- data.frame(word=names(word_freqs3),freq=word_freqs3)
+w1 <- wordcloud(dm$word,dm$freq,scale=c(5,1),max.words=100,min=20,random.order = FALSE, colors= brewer.pal(8,"Dark2"))
+w2 <- wordcloud(dm1$word,dm1$freq,scale=c(5,1),max.words=100,min=20,random.order = FALSE, colors= brewer.pal(8,"Dark2"))
+w3 <- wordcloud(dm2$word,dm2$freq,scale=c(5,1),max.words=100,min=2,random.order = FALSE, colors= brewer.pal(8,"Dark2"))
+w4 <- wordcloud(dm3$word,dm3$freq,scale=c(5,1),max.words=100,min=20,random.order = FALSE, colors= brewer.pal(8,"Dark2"))
+
+# Get Sentiment scores and combine with data frame to save in files
+positives = readLines("positive-words.txt")
+negatives = readLines("negative-words.txt")
+library(plyr)
+library(stringr)
+require(plyr)
+require(stringr)
+sentiment_scores = function(tweets, positive_words, negative_words, .progress='none'){
+  scores = laply(tweets,
+                 function(tweets, positive_words, negative_words){
+                   tweets = gsub("[[:punct:]]", "", tweets)    # remove punctuation
+                   tweets = gsub("[[:cntrl:]]", "", tweets)   # remove control characters
+                   tweets = gsub('\\+', '', tweets)          # remove digits
+                   
+                   # Let's have error handling function when trying tolower
+                   tryTolower = function(x){
+                     # create missing value
+                     y = NA
+                     # tryCatch error
+                     try_error = tryCatch(tolower(x), error=function(e) e)
+                     # if not an error
+                     if (!inherits(try_error, "error"))
+                       y = tolower(x)
+                     # result
+                     return(y)
+                   }
+                   # use tryTolower with sapply
+                   tweets = sapply(tweets, tryTolower)
+                   # split sentence into words with str_split function from stringr package
+                   word_list = str_split(tweets, "\\s+")
+                   words = unlist(word_list)
+                   
+                   # compare words to the dictionaries of positive & negative terms
+                   positive.matches = match(words, positive_words)
+                   negative.matches = match(words, negative_words)
+                   # get the position of the matched term or NA
+                   # we just want a TRUE/FALSE
+                   positive_matches <- !is.na(positive.matches)
+                   negative_matches <- !is.na(negative.matches)
+                   # final score
+                   score = sum(positive_matches) - sum(negative_matches)
+                   return(score)
+                 }, positive_words, negative_words, .progress=.progress)
+  return(scores)
+}
+score = sentiment_scores(tweetFrame$text, positives, negatives,.progress="text")
+score1=sentiment_scores(tweetFrame1$text, positives, negatives,.progress='text')
+score2=sentiment_scores(tweetFrame2$text, positives, negatives,.progress='text')
+score3=sentiment_scores(tweetFrame3$text, positives, negatives,.progress='text')
+
+# plot the sentiment scores for each topic on histogram
+hist(score,xlab=" ",main="Sentiment Scores of 2000 sample tweets for Starbucks" ,
+     border="black",col="violet")
+hist(score1,xlab=" ",main="Sentiment Scores of sample tweets for Starbucksforlife",
+     border="black",col="violet")
+hist(score2,xlab=" ",main="Sentiment Scores of sample tweets for Starbucksathome",
+     border="black",col="violet")
+hist(score3,xlab=" ",main="Sentiment Scores of sample tweets for Starbucksgivegood",
+     border="black",col="violet")
+
+# Get locations of users whose tweets mentioning Starbucks
+library(RgoogleMaps)
+library(ggmap)
+library(ggplot2)
+library(sp)
+library(grid)
+library(maps)
+library(maptools)
+library(sp)
+library(grid)
+devtools::install_github("dkahle/ggmap")
+devtools::install_github("hadley/ggplot2")
+c <- cbind(tweetFrame, score)
+c  <- cbind(c, abs(score))
+
+# get users' location
+userInfo <- lookupUsers(c$screenName)
+userFrame <- twListToDF(userInfo)
+write.csv(userFrame,file="starbucks_user.csv")
+userFrame <- read.csv("starbucks_user.csv",row.names=1)
+locatedUsers <- !is.na(userFrame$location)
+locations  <- geocode(as.character(userFrame$location[locatedUsers]))
+
+# combine and save to files
+write.csv(locations, file = "starbucks_user_location.csv")
+locations <- read.csv("starbucks_user_location.csv",row.names=1)
+userlocation <- cbind(userFrame, locations)
+s01 <- merge(c, userlocation, by="screenName")
+sentiment <- data.frame(s01$screenName, s01$text,s01$retweetCount,s01$favoriteCount,s01$score,s01$`abs(score)`,s01$lon,s01$lat)
+names(sentiment) <- c("screenName","text","retweet_count","favorite_count","score","absolute_score","lon","lat")
+s02 <- na.omit(sentiment)
+
+# omit location not in US
+s02 $lon[s02$lon >= -66] <-NA
+s02 $lon[s02$lon <= -125] <- NA
+s02 $lat[s02$lat <= 24] <- NA
+s02 $lat[s02$lat >= 55] <- NA
+s03 <- na.omit(s02)
+write.csv(s03,"starbucks_info.csv")
+
+# plot US users' locations on maps
+map.data <- map_data("state")
+ggplot(map.data) +
+  geom_map(aes(map_id=region),
+           map=map.data,
+           fill="white",
+           color="grey",
+           size=0.25) +
+  expand_limits(x=map.data$long,y=map.data$lat) +
+  theme(axis.line=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title=element_blank(),
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        plot.background=element_blank(),
+        plot.margin=unit(0*c(-1.5,-1.5,-1.5,-1.5),"lines")) +
+  geom_point(data=points,
+             aes(x=x,y=y),size=1,
+             alpha=1/5,color="red")
+
+# Get locations of users whose tweets mentioning StarbucksForLife
+c1 <- cbind(tweetFrame1, score1)
+c1  <- cbind(c1, abs(score1))
+userInfo1 <- lookupUsers(c1$screenName)
+userFrame1 <- twListToDF(userInfo1)
+write.csv(userFrame1,file="life_user.csv")
+userFrame1 <- read.csv("life_user.csv",row.names=1)
+locatedUsers1 <- !is.na(userFrame1$location)
+locations1  <- geocode(as.character(userFrame1$location[locatedUsers1]))
+write.csv(locations, file = "life_user_location.csv")
+locations1 <- read.csv("life_user_location.csv",row.names=1)
+userlocation1 <- cbind(userFrame1, locations1)
+s11 <- merge(c1, userlocation1, by="screenName")
+sentiment1 <- data.frame(s11$screenName, s11$text,s11$retweetCount,s11$favoriteCount,s11$score,s11$`abs(score)`,s11$lon,s11$lat)
+names(sentiment1) <- c("screenName","text","retweet_count","favorite_count","score","absolute_score","lon","lat")
+s12 <- na.omit(sentiment1)
+s12 $lon[s12$lon >= -66] <-NA
+s12 $lon[s12$lon <= -125] <- NA
+s12 $lat[s12$lat <= 24] <- NA
+s12 $lat[s12$lat >= 55] <- NA
+s13 <- na.omit(s12)
+write.csv(s13,"life_info.csv")
+
+# Get locations of users whose tweets mentioning StarbucksAtHome
+c2 <- cbind(tweetFrame2, score2)
+c2  <- cbind(c2, abs(score2))
+userInfo2 <- lookupUsers(c2$screenName)
+userFrame2 <- twListToDF(userInfo2)
+write.csv(userFrame2,file="home_user.csv")
+userFrame2 <- read.csv("home_user.csv",row.names=1)
+locatedUsers2 <- !is.na(userFrame2$location)
+locations2  <- geocode(as.character(userFrame2$location[locatedUsers2]))
+write.csv(locations, file = "home_user_location.csv")
+locations2 <- read.csv("home_user_location.csv",row.names=1)
+userlocation2 <- cbind(userFrame2, locations2)
+s21 <- merge(c2, userlocation2, by="screenName")
+sentiment2 <- data.frame(s21$screenName, s21$text,s21$retweetCount,s21$favoriteCount,s21$score,s21$`abs(score)`,s21$lon,s21$lat)
+names(sentiment2) <- c("screenName","text","retweet_count","favorite_count","score","absolute_score","lon","lat")
+s22 <- na.omit(sentiment)
+s22 $lon[s22$lon >= -66] <-NA
+s22 $lon[s22$lon <= -125] <- NA
+s22 $lat[s22$lat <= 24] <- NA
+s22 $lat[s22$lat >= 55] <- NA
+s23 <- na.omit(s22)
+write.csv(s23,"home_info.csv")
+
+# Get locations of users whose tweets mentioning StarbucksGiveGodd
+c3 <- cbind(tweetFrame3, score3)
+c3  <- cbind(c3, abs(score3))
+userInfo3 <- lookupUsers(c3$screenName)
+userFrame3 <- twListToDF(userInfo3)
+write.csv(userFrame3,file="give_user.csv")
+userFrame3 <- read.csv("give_user.csv",row.names=1)
+locatedUsers3 <- !is.na(userFrame3$location)
+locations3  <- geocode(as.character(userFrame3$location[locatedUsers3]))
+write.csv(locations3, file = "give_user_location.csv")
+locations3 <- read.csv("give_user_location.csv",row.names=1)
+userlocation3 <- cbind(userFrame3, locations3)
+s31 <- merge(c3, userlocation3, by="screenName")
+sentiment3 <- data.frame(s31$screenName, s31$text,s31$retweetCount,s31$favoriteCount,s31$score,s31$`abs(score)`,s31$lon,s31$lat)
+names(sentiment3) <- c("screenName","text","retweet_count","favorite_count","score","absolute_score","lon","lat")
+s32 <- na.omit(sentiment)
+s32 $lon[s32$lon >= -66] <-NA
+s32 $lon[s32$lon <= -125] <- NA
+s32 $lat[s32$lat <= 24] <- NA
+s32 $lat[s32$lat >= 55] <- NA
+s33 <- na.omit(s32)
+write.csv(s33,"home_info.csv")
+
+# Obtain and combine data for statistical computation
+data1 <- read.csv("life_info.csv",row.names=1)
+data2 <- read.csv("home_info.csv",row.names=1)
+data3 <- read.csv("give_info.csv",row.names=1)
+total <- rbind(data1, data2, data3)
+write.csv(total,file="total.csv")
+
+# add "hashtag"
+data1$hashtag =rep("starbucksforlife",454)
+data2$hashtag = rep("starbucksathome",220)
+data3$hashtag=rep("starbucksgivegood",313)
+
+# combining those data into one for comparison
+d4 = rbind(data1,data2,data3)
+scoretotal = na.omit(d4$score)
+summary(scoretotal)
+retweet = total$retweet_count
+favorite = total$favorite_count
+summary(retweet)
+summary(favorite)
+
+# Hypothesis Testing 
+# Null Hypothesis: People have a negative attitude toward Starbucks For Life. (i.e. Score = -1)
+alpha = 0.05
+mu0 = -1
+t1 = (mean(data1$score)- mu0)/(sd(data1$score)/sqrt(length(data1$score)))
+t1
+2* pt(-abs(t1),df=length(data1$score)-1)
+
+# Null Hypothesis: People have a negative attitude toward Starbucks At Home.
+t2 = (mean(data2$score)- mu0)/(sd(data2$score)/sqrt(length(data2$score)))
+t2
+2* pt(-abs(t2),df=length(data2$score)-1)
+
+# Null Hypothesis: People have a negative attitude toward Starbucks Give Good.
+t3 = (mean(data3$score)- mu0)/(sd(data3$score)/sqrt(length(data3$score)))
+t3
+2* pt(-abs(t3),df=length(data3$score)-1)
+
+# analyze the relationship between sentiment and retweet number
+aov.out = aov(total$retweet_count~total$score,data=total)
+summary(aov.out)
+model = lm(total$retweet_count~total$score)
+summary(model)
+ggplot(data=total,aes(x=score,y=retweet_count)) +
+  geom_point() +
+  geom_smooth(method="lm") +
+  scale_y_continuous(limits=c(0,6000))
+  
+# Compare the retweet number mean difference between the three hashtag groups 
+# (i.e. "Starbucks For Life","Starbucks At Home", "Starbucks Give Good")
+results <- aov(total$retweet_count~factor(d4$hashtag), data =total)
+summary(results)
+summary.lm(results)
+
+# Compare the score mean difference between the three hashtag groups 
+# (i.e. "Starbucks For Life","Starbucks At Home", "Starbucks Give Good")
+results <- aov(total$score ~ factor(d4$hashtag), data =total)
+summary(results)
+summary.lm(results)
+
+#Mapping with Sentiment Scores on US map
+USMap <- get_map (location = c(lon = -95.71289, lat = 37.09024), zoom=4, scale=2, maptype="roadmap", source="google",crop=TRUE)
+Map1 <- ggmap(USMap) +
+  geom_point(data = total, aes(x=total$lon,y=total$lat),col=ifelse(((total$score>=0)),"brown1","blue"),alpha=0.4,size=total$absolute_score) +
+  scale_size_continuous(range=total$score)+
+  ggtitle("US Map for the Total Dataset")
+Map1
+
+# mapping under topic "starbucks for life"
+Map2 <- ggmap(USMap) +
+  geom_point(data = data1, aes(x=data1$lon,y=data1$lat),col=ifelse(((data1$score>=0)),"brown1","blue"),alpha=0.4,size=data1$absolute_score) +
+  scale_size_continuous(range=data1$score)+
+  ggtitle("US Map under #Starbucks For Life")
+Map2
+
+# mapping under topic "starbucks at home"
+Map3 <- ggmap(USMap) +
+  geom_point(data = data2, aes(x=data2$lon,y=data2$lat),col=ifelse(((data2$score>=0)),"brown1","blue"),alpha=0.4,size=data2$absolute_score) +
+  scale_size_continuous(range=data2$score)+
+  ggtitle("US Map under #Starbucks At Home")
+Map3
+
+# mapping under topic "starbucks give good"
+Map4 <- ggmap(USMap) +
+  geom_point(data = data3, aes(x=data3$lon,y=data3$lat),col=ifelse(((data3$score>=0)),"brown1","blue"),alpha=0.4,size=data3$absolute_score) +
+  scale_size_continuous(range=data3$score)+
+  ggtitle("US Map under #Starbucks Give Good")
+Map4
+
+# mapping under topic "starbucks for life"
+Map2 <- ggmap(USMap) +
+  geom_point(data = data1, aes(x=data1$lon,y=data1$lat),col=ifelse(((data1$score>=0)),"brown1","blue"),alpha=0.4,size=data1$absolute_score) +
+  scale_size_continuous(range=data1$score)+
+  ggtitle("US Map under #Starbucks For Life")
+Map2
+
+# mapping under topic "starbucks at home"
+Map3 <- ggmap(USMap) +
+  geom_point(data = data2, aes(x=data2$lon,y=data2$lat),col=ifelse(((data2$score>=0)),"brown1","blue"),alpha=0.4,size=data2$absolute_score) +
+  scale_size_continuous(range=data2$score)+
+  ggtitle("US Map under #Starbucks At Home")
+Map3
+
+# mapping under topic "starbucks give good"
+Map4 <- ggmap(USMap) +
+  geom_point(data = data3, aes(x=data3$lon,y=data3$lat),col=ifelse(((data3$score>=0)),"brown1","blue"),alpha=0.4,size=data3$absolute_score) +
+  scale_size_continuous(range=data3$score)+
+  ggtitle("US Map under #Starbucks Give Good")
+Map4
+
+# sentiment across different locations
+# Los Angeles
+LAMap <- get_map (location = c(lon = -118.2437, lat = 34.05223), zoom=6, scale=2, maptype="roadmap", source="google",crop=TRUE)
+Map5 <- ggmap(LAMap) +
+  geom_point(data = total, aes(x=total$lon,y=total$lat),col=ifelse(((total$score>=0)),"brown1","blue"),alpha=0.4,size=total$absolute_score) +
+  scale_size_continuous(range=total$score)+
+  ggtitle("Los Angeles Map")
+Map5
+
+# Penn
+PMap <- get_map (location = c(lon = -77.19452, lat = 41.20332), zoom=6, scale=2, maptype="roadmap", source="google",crop=TRUE)
+Map6 <- ggmap(PMap) +
+  geom_point(data = total, aes(x=total$lon,y=total$lat),col=ifelse(((total$score>=0)),"brown1","blue"),alpha=0.4,size=total$absolute_score) +
+  scale_size_continuous(range=total$score)+
+  ggtitle("Penn Map")
+Map6
+
+# Massachusettes
+MaMap <- get_map (location = c(lon = -71.38244, lat = 42.40721), zoom=8, scale=2, maptype="roadmap", source="google",crop=TRUE)
+Map7 <- ggmap(MaMap) +
+  geom_point(data = total, aes(x=total$lon,y=total$lat),col=ifelse(((total$score>=0)),"brown1","blue"),alpha=0.4,size=total$absolute_score) +
+  scale_size_continuous(range=total$score)+
+  ggtitle("Massachusettes Map")
+Map7
+
+# New York
+NMap <- get_map (location = c(lon = -74.00597, lat = 40.71278), zoom=9, scale=2, maptype="roadmap", source="google",crop=TRUE)
+# mapping under topic "starbucks for life"
+Map8 <- ggmap(NMap) +
+  geom_point(data = total, aes(x=total$lon,y=total$lat),col=ifelse(((total$score>=0)),"brown1","blue"),alpha=0.4,size=total$absolute_score) +
+  scale_size_continuous(range=total$score)+
+  ggtitle("New York Map")
+Map8
+
+# shiny with an interactive map between sentiment scores and number of retweet
+library(shiny)
+library(dplyr)
+library(leaflet)
+library(memoise)
+total <- read.csv("total.csv", row.names = 1)
+total <- mutate(total, popup_info=paste(sep = "<br/>", paste0("<b>", total$screenName, "</b>"), paste0 ("retweet count: ", total$retweet_count), paste0 ("sentiment score: ",total$score)))
+
+factorpal<- colorFactor(
+  palette = "RdPu",
+  domain = c(total$retweet_count),
+  level = NULL,
+  ordered= FALSE, 
+  na.color = "#808080"
+)
+
+r_colors <- rgb(t(col2rgb(colors()) / 255))
+names(r_colors) <- colors()
+
+ui <- fluidPage(
+  leafletOutput("PopularityMap"),
+  p()
+)
+
+server <- function(input, output, session) {
+ 
+  output$PopularityMap <- renderLeaflet({
+    leaflet(total) %>%
+      addTiles(
+      ) %>%  # Add default OpenStreetMap map tiles
+      addCircleMarkers(lng=~lon,
+                       lat = ~lat, 
+                       popup= ~popup_info,
+                       radius = 3,
+                       color = ~factorpal(total$retweet_count),
+                       fillOpacity = 1) %>%
+      addProviderTiles("Stamen.Watercolor") %>%
+      addProviderTiles("CartoDB.Positron") %>%
+      setView(lng = -93.85, lat = 37.45, zoom = 4)
+  })
+}
+shinyApp(ui = ui, server = server)
+
+# shiny with navbar of plot,chart and map information
+ui <- navbarPage(
+  title = "Twitter Mining Brand Perceptions for Starbucks",
+  navbarMenu(
+    title = "Map",
+    tabPanel("United States",
+             div("I started to mine 2000 tweets mentiong starbucks all over the United States"),
+             div("Each red point represents each tweet"),
+             div("I found that there are some clustering among California and East Coast, so later when I plotted the sentiment scores, I first included those two area in comparison."),
+             splitLayout(img(src="Starbucks_user.png"))),
+    tabPanel("Los Angeles",
+             div("This map shows all Tweets mentiong Starbucks three major marketing hashtags with sentiment scores around California."),
+             div("The red points represent a positive attitude and blue points represent a negative attitude.The larger the point, the higher the absolute score."),
+             splitLayout(img(src="LA_map.png"))),
+    tabPanel("Massachusetts", 
+             div("This map shows all Tweets mentiong Starbucks three major marketing hashtags with sentiment scores around Massachussettes."),
+             div("The red points represent a positive attitude and blue points represent a negative attitude.The larger the point, the higher the absolute score."),
+             splitLayout(img(src="MA_map.png"))),
+    tabPanel("Penn",
+             div("This map shows all Tweets mentiong Starbucks three major marketing hashtags with sentiment scores around Peen."),
+             div("The red points represent a positive attitude and blue points represent a negative attitude.The larger the point, the higher the absolute score."),
+             splitLayout(img(src="Penn_map.png"))),
+    tabPanel("New York",
+            div("This map shows all Tweets mentiong Starbucks three major marketing hashtags with sentiment scores around New York."),
+            div("The red points represent a positive attitude and blue points represent a negative attitude.The larger the point, the higher the absolute score."),
+            splitLayout(img(src="NY_map.png")))),
+  navbarMenu(
+      title = "Distribution of Sentiment scores vs. Frequency",
+      tabPanel("Starbucks",
+               div("This graph shows that tweets' sentiment scores and its number with 0 being neutral, negative number representing negative attitude and positive number representing positive attitude."),
+               div("We can see that the average sentiment scores for tweets mentioning starbucks is below 0, which means from those 2000 sample tweets , users on average hold negative attitude toward Starbucks. "),
+               splitLayout(img(src="s_sentiment.png",height="500",width="500"))),
+      tabPanel("Starbucks For Life Event", 
+               div("Starbucks For Life Event is a promotion holding by Starbucks and can also be considered as a marketing strategy for Starbucks. Specifically, Starbucks aim to provide loyatly customers rewards and further market their new holiday products. This graph shows the tweets' sentiment scores when users mention this event."),
+               div("Clearly, the average score is above 0. From those 1000 tweets, users on average hold a positive attitude toward Starbucks For Life Event."),
+               splitLayout(img(src="s_life_sentiment.png",height="500",width="500"))),
+      tabPanel("Starbucks At Home",
+               div("Starbucks At Home is a hashtag promoting by Starbucks official to market their products, for example, their convenient K-Cup pods, VIA Instant. Coffee at home promotes customers to buy their products so that they can make their own coffee at home and aims to provide customers a perception of convenience and warm."),
+               div("From the distribution graph, there are no negative sentiment scores toward this hashtag among 1000 tweets. "),
+               splitLayout(img(src="s_home_sentiment.png",height="500",width="500"))),
+      tabPanel("Starbucks Give Good",
+               div("Starbucks Give Good is another hashtag and promotes the idea of giving. Give Good project aims to celebrate communities and local heroes with $1 million worth of Starbucks Cards throughout the month of December.It gives customers a perception of good and giving."),
+               div("Surprisingly,the distribution graph shows that the mode is below 0. The average score is less than Starbucks At Home. Laterly, I will plot those sentiment scores on a US map to see which region specifically has a negative attitude toward this event."),
+               splitLayout(img(src="s_give_sentiment.png",height="500",width="500")))),
+  navbarMenu(
+    title = "Frequent Words Distribution",
+    tabPanel("Starbucks",
+             div("This is the most frequent words distribution for 2000 tweets mentioned Starbucks"),
+             div("The most frequent words include starbucks, rt(meaning retweeted),holiday, give good, gifts, free, chicago,etc."),
+             splitLayout(img(src="starbucks_frequent_words.png",height="500",width="500"))),
+    tabPanel("Starbucks For Life",
+             div("This is the most frequent words distribution for 1000 tweets mentioned Starbucks For Life"),
+             div("The most frequent words include win,life,game,chances,board,collection, prizes, etc."),
+             splitLayout(img(src="starbucks_life_fw.png",height="500",width="500"))),
+    tabPanel("Starbucks At Home",
+             div("This is the most frequent words distribution for 1000 tweets mentioned Starbucks At Home"),
+             div("The most frequent words include davelackies, which is a editor-in-chief and founder of a beauty magazine, clinique, stocking, red, pike, etc."),
+             splitLayout(img(src="starbucks_home_fw.png",height="500",width="500"))),
+    tabPanel("Starbucks Give Good",
+             div("This is the most frequent words distribution for 1000 tweets mentioned Starbucks Give Good"),
+             div("The most frequent words include giving, love, retweet, season, free, holiday, kindness, please, etc."),
+             splitLayout(img(src="starbucks_give_fc.png",height="500",width="500"))))
+)
+server <- function(session,input,output){
+
+}
+shinyApp(ui = ui, server = server)
+
+#Shiny with an interactive wordcloud
+library(memoise)
+library(wordcloud)
+# wordcloud
+life <- read.csv("life_info.csv", row.names = 1)
+home <- read.csv("home_info.csv", row.names = 1)
+give <- read.csv("give_info.csv", row.names = 1)
+# The list of valid books
+write.table(life$text, "life.txt", fileEncoding='utf8')
+write.table(home$text, "home.txt",fileEncoding='utf8' )
+write.table(give$text, "give.txt",fileEncoding='utf8' )
+
+books <- list("#StarbucksForLife" = "life" ,
+              "#StarbucksAtHome" =  "home",
+              "#StarbucksGiveGood" = "give")
+getTermMatrix <- memoise(function(book){
+  text <- readLines(sprintf("./%s.txt",book),encoding="UTF-8")
+  myCorpus = Corpus(VectorSource(text))
+  myCorpus = tm_map(myCorpus, PlainTextDocument)
+  myCorpus = tm_map(myCorpus, removePunctuation)
+  myCorpus = tm_map(myCorpus, removeNumbers)
+  myCorpus = tm_map(myCorpus, content_transformer(function(x) iconv(enc2utf8(x), sub = "byte")))
+  myCorpus = tm_map(myCorpus, removeWords,
+                    c(stopwords('english'),"starbucks","life","home","give","good"))
+  try.tolower = function(x){
+    y = NA
+    try_error = tryCatch(tolower(x), error=function(e) e)
+    if (!inherits(try_error, "error"))
+      y = tolower(x)
+    return(y)
+  }
+  myCorpus = sapply(myCorpus, try.tolower)
+  myCorpus = myCorpus[myCorpus != ""]
+  names(myCorpus) = NULL
+  return(myCorpus)
+  
+  myDTM = TermDocumentMatrix(myCorpus,
+                             control = list(minWordLength = 1))
+  m = as.matrix(myDTM)
+  word_freqs = sort(rowSums(m), decreasing = TRUE)
+  dm = data.frame(word=names(word_freqs), freq=word_freqs)
+})
+server<- function(input, output, session) {
+  # Define a reactive expression for the document term matrix
+  terms <- reactive({
+    # Change when the "update" button is pressed...
+    input$update
+    # ...but not for anything else
+    isolate({
+      withProgress({
+        setProgress(message = "Processing corpus...")
+        getTermMatrix(input$selection)
+      })
+    })
+  })
+  
+  # Make the wordcloud drawing predictable during a session
+  wordcloud_rep <- repeatable(wordcloud)
+  output$plot <- renderPlot({
+    wordcloud_rep(dm$word,dm$freq, scale=c(5,1),
+                  min.freq = input$freq, max.words=input$max,
+                  colors=brewer.pal(8, "Dark2"))
+  })
+}
+
+ui<-fluidPage(
+  # Application title
+  titlePanel("Word Cloud"),
+  sidebarLayout(
+    # Sidebar with a slider and selection inputs
+    sidebarPanel(
+      selectInput("selection", "Choose a hashtag:",
+                  choices = books),
+      actionButton("update", "Change"),
+      hr(),
+      sliderInput("freq",
+                  "Minimum Frequency:",
+                  min = 1,  max = 100, value = 15),
+      sliderInput("max",
+                  "Maximum Number of Words:",
+                  min = 1,  max = 300,  value = 100)
+    ),
+    # Show Word Cloud
+    mainPanel(
+      plotOutput("plot")
+    )
+  )
+)
+shinyApp(ui = ui, server = server)
+
+\end{document}
