@@ -257,8 +257,8 @@ ggplot(map.data) +
         panel.grid.major=element_blank(),
         plot.background=element_blank(),
         plot.margin=unit(0*c(-1.5,-1.5,-1.5,-1.5),"lines")) +
-  geom_point(data=points,
-             aes(x=x,y=y),size=1,
+  geom_point(data=s03,
+             aes(x=s03$lon,y=s03$lat),size=1,
              alpha=1/5,color="red")
 
 # Get locations of users whose tweets mentioning StarbucksForLife
