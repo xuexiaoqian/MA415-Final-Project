@@ -1,0 +1,431 @@
+---
+title: "MA615 Final Project"
+author: "Xiaoqian Xue"
+date: "12/18/2017"
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(devtools)
+library(twitteR)
+library(ROAuth)
+library(tm)
+library(wordcloud)
+library(ggplot2)
+library(RColorBrewer)
+library(wordcloud)
+library(plyr)
+library(stringr)
+require(plyr)
+require(stringr)
+library(RgoogleMaps)
+library(ggmap)
+library(sp)
+library(grid)
+library(maps)
+library(maptools)
+library(sp)
+api_key <- "zwmo2nKieK0RGVoFMP9KfGci9"
+api_secret <- "Az0OyiiUDyWJlCwnZtEBJxRKLNJIZ4FqOPyUvyDNqUM7Ko2lUr"
+access_token <- "2809402781-RQuIDNFLL1dg5i3xETd1W3t8Kol9ZVqufMrgsRf"
+access_token_secret <- "q5s33WockcM1JdwLyxJmQP9zGv3B0ilzYXmnYF8TMAN0q"
+setup_twitter_oauth(api_key, api_secret, access_token, access_token_secret)
+s <- readRDS("starbucks.rds")
+s1 <- readRDS("slife.rds")
+s2 <- readRDS("shome.rds")
+s3 <- readRDS("sgive.rds")
+tweetFrame <- twListToDF(s) 
+tweetFrame1 <- twListToDF(s1) 
+tweetFrame2 <- twListToDF(s2) 
+tweetFrame3 <- twListToDF(s3) 
+t <- Corpus(VectorSource(tweetFrame$text))
+t1 <- Corpus(VectorSource(tweetFrame1$text))
+t2 <- Corpus(VectorSource(tweetFrame2$text))
+t3 <- Corpus(VectorSource(tweetFrame3$text))
+removeURL <- function(x) gsub("http[^[:space:]]*", "", x)
+t <- tm_map(t, content_transformer(removeURL))
+t1 <- tm_map(t1, content_transformer(removeURL))
+t2 <- tm_map(t2, content_transformer(removeURL))
+t3 <- tm_map(t3, content_transformer(removeURL))
+removeNumPunct <- function(x) gsub("[^[:alpha:][:space:]]*", "", x) 
+t <- tm_map(t, content_transformer(removeNumPunct))
+t1 <- tm_map(t1, content_transformer(removeNumPunct))
+t2 <- tm_map(t2, content_transformer(removeNumPunct))
+t3 <- tm_map(t3, content_transformer(removeNumPunct))
+myStopwords <- c(setdiff(stopwords('english'), c("starbucks","life","home","give","good")))
+t <- tm_map(t, removeWords, myStopwords)
+t1 <- tm_map(t1, removeWords, myStopwords)
+t2 <- tm_map(t2, removeWords, myStopwords)
+t3 <- tm_map(t3, removeWords, myStopwords)
+t <- tm_map(t, stripWhitespace)
+t1 <- tm_map(t1, stripWhitespace)
+t2 <- tm_map(t2, stripWhitespace)
+t3 <- tm_map(t3, stripWhitespace)
+t <- tm_map(t, content_transformer(tolower))
+t1 <- tm_map(t1, content_transformer(tolower))
+t2 <- tm_map(t2, content_transformer(tolower))
+t3 <- tm_map(t3, content_transformer(tolower))
+tdm <- TermDocumentMatrix(t,control = list(wordLengths = c(1, Inf)))
+tdm1 <- TermDocumentMatrix(t1,control = list(wordLengths = c(1, Inf)))
+tdm2 <- TermDocumentMatrix(t2,control = list(wordLengths = c(1, Inf)))
+tdm3 <- TermDocumentMatrix(t3,control = list(wordLengths = c(1, Inf)))
+freq.terms <- findFreqTerms(tdm, lowfreq = 80)
+freq.terms <- findFreqTerms(tdm1, lowfreq = 50)
+freq.terms <- findFreqTerms(tdm2, lowfreq = 5)
+freq.terms <- findFreqTerms(tdm3, lowfreq = 50)
+term.freq <- rowSums(as.matrix(tdm))
+term1.freq <- rowSums(as.matrix(tdm1))
+term2.freq <- rowSums(as.matrix(tdm2))
+term3.freq <- rowSums(as.matrix(tdm3))
+term.freq <- subset(term.freq, term.freq >= 80)
+term1.freq <- subset(term1.freq, term1.freq >= 50)
+term2.freq <- subset(term2.freq, term2.freq >= 5)
+term3.freq <- subset(term3.freq, term3.freq >= 50)
+df <- data.frame(term = names(term.freq), freq = term.freq)
+df1 <- data.frame(term = names(term1.freq), freq = term1.freq)
+df2 <- data.frame(term = names(term2.freq), freq = term2.freq)
+df3 <- data.frame(term = names(term3.freq), freq = term3.freq)
+m <- as.matrix(tdm)
+m1 <- as.matrix(tdm1)
+m2 <- as.matrix(tdm2)
+m3 <- as.matrix(tdm3)
+word_freqs <- sort(rowSums(m), decreasing = T)
+word_freqs1 <- sort(rowSums(m1), decreasing = T)
+word_freqs2 <- sort(rowSums(m2), decreasing = T)
+word_freqs3 <- sort(rowSums(m3), decreasing = T)
+dm <- data.frame(word=names(word_freqs),freq=word_freqs)
+dm1 <- data.frame(word=names(word_freqs1),freq=word_freqs1)
+dm2 <- data.frame(word=names(word_freqs2),freq=word_freqs2)
+dm3 <- data.frame(word=names(word_freqs3),freq=word_freqs3)
+positives = readLines("positive-words.txt")
+negatives = readLines("negative-words.txt")
+sentiment_scores = function(tweets, positive_words, negative_words, .progress='none'){
+  scores = laply(tweets,
+                 function(tweets, positive_words, negative_words){
+                   tweets = gsub("[[:punct:]]", "", tweets)    # remove punctuation
+                   tweets = gsub("[[:cntrl:]]", "", tweets)   # remove control characters
+                   tweets = gsub('\\+', '', tweets)          # remove digits
+                   
+                   # Let's have error handling function when trying tolower
+                   tryTolower = function(x){
+                     # create missing value
+                     y = NA
+                     # tryCatch error
+                     try_error = tryCatch(tolower(x), error=function(e) e)
+                     # if not an error
+                     if (!inherits(try_error, "error"))
+                       y = tolower(x)
+                     # result
+                     return(y)
+                   }
+                   # use tryTolower with sapply
+                   tweets = sapply(tweets, tryTolower)
+                   # split sentence into words with str_split function from stringr package
+                   word_list = str_split(tweets, "\\s+")
+                   words = unlist(word_list)
+                   
+                   # compare words to the dictionaries of positive & negative terms
+                   positive.matches = match(words, positive_words)
+                   negative.matches = match(words, negative_words)
+                   # get the position of the matched term or NA
+                   # we just want a TRUE/FALSE
+                   positive_matches <- !is.na(positive.matches)
+                   negative_matches <- !is.na(negative.matches)
+                   # final score
+                   score = sum(positive_matches) - sum(negative_matches)
+                   return(score)
+                 }, positive_words, negative_words, .progress=.progress)
+  return(scores)
+}
+score = sentiment_scores(tweetFrame$text, positives, negatives)
+score1=sentiment_scores(tweetFrame1$text, positives, negatives)
+score2=sentiment_scores(tweetFrame2$text, positives, negatives)
+score3=sentiment_scores(tweetFrame3$text, positives, negatives)
+devtools::install_github("dkahle/ggmap")
+devtools::install_github("hadley/ggplot2")
+starbucks <- read.csv("starbucks_info.csv")
+life <- read.csv("life_info.csv")
+home <- read.csv("home_info.csv")
+give <- read.csv("give_info.csv")
+data1 <- read.csv("life_info.csv",row.names=1)
+data2 <- read.csv("home_info.csv",row.names=1)
+data3 <- read.csv("give_info.csv",row.names=1)
+total <- read.csv("total.csv", row.names=1)
+
+```
+
+## Starbucks Brand Perceptions
+
+Starbucks Corporation, founded in 1971, has been long considered the main representative of "second wave coffee", distinguishing itself from other coffee-serving venues in the US by taste, quality and customer experience.Their success and customers' addiction with the brand have made many scholars wonder the reason. 
+
+Some scholars have argued that the popularity of Starbucks is probably not due to its quality but because of customer's buying experience and its marketing strategy.
+
+## Using Twitter
+
+Twitter is an online news and social networking service where users post and interact with messages, called "tweets." 
+
+As of 2016, Twitter had more than 319 million monthly active users.
+8% followers of Twitter acounts are publicly visible and can be programmatically assessed through Twitter's Application Programming Interface. 
+
+Therefore, in this project, I am going to use Twitter as the plant form to assess Starbucks brand images. 
+
+## Three hashtags about Starbucks 
+
+In order to figure out what Internet users, specifically Twitter users, are talking about Starbucks and how they are feeling about Starbucks brands, I planned to collect tweets including the following hashtags:
+
+- "#starbucks or @starbucks" (2000 sample tweets)
+
+- "#starbucksforlife" (1000 tweets)
+
+- "#starbucksathome" (1000 tweets)
+
+- "#givegood" (1000 tweets)
+
+## Distribution Table of Frequent Words
+
+To have a general understanding on what are the most popular words that people use in tweets to express regard Starbucks brands and its marketing, I obtain histograms to show the frquent words and also wordclouds under each topic. 
+
+## Distribution Table of Frequent Words -- #Starbucks
+```{r}
+ggplot(df, aes(x=term, y=freq)) + geom_bar(stat = "identity") + xlab ("Terms") + ylab("Count") + coord_flip() + theme(axis.text=element_text(size=7))
+```
+
+## Distribution Table of Frequent Words #StarbucksForLife
+```{r}
+ggplot(df1, aes(x=term, y=freq)) + geom_bar(stat = "identity") + xlab ("Terms") + ylab("Count") + coord_flip() + theme(axis.text=element_text(size=7))
+```
+
+## Distribution Table of Frequent Words #StarbucksAtHome
+```{r}
+ggplot(df2, aes(x=term, y=freq)) + geom_bar(stat = "identity") + xlab ("Terms") + ylab("Count") + coord_flip() + theme(axis.text=element_text(size=7))
+```
+
+## Distribution Table of Frequent Words #StarbucksGiveLife
+```{r}
+ggplot(df3, aes(x=term, y=freq)) + geom_bar(stat = "identity") + xlab ("Terms") + ylab("Count") + coord_flip() + theme(axis.text=element_text(size=7))
+```
+
+## Word Cloud
+
+Then let us plot some word clouds
+
+## Word Cloud for #Starbucks
+```{r}
+wordcloud(dm$word,dm$freq,scale=c(5,1),max.words=100,min=20,random.order = FALSE, colors= brewer.pal(8,"Dark2"))
+```
+
+## Word Cloud for #StarbucksForLife
+![](~/Desktop/MA615/MA615UpdatedProject/starbucksforlife.png)
+
+## Word Cloud for #StarbucksAtHome
+![](~/Desktop/MA615/MA615UpdatedProject/starbucksathome.png)
+
+## Word Cloud for #StarbucksGiveGood
+
+```{r}
+w4 <- wordcloud(dm3$word,dm3$freq,scale=c(5,1),max.words=100,min=20,random.order = FALSE, colors= brewer.pal(8,"Dark2"))
+```
+
+##  Statistical Analysis
+
+In this part, I am going to answer the following statistical questions by using modelling:
+
+- "Whether people hold a negative attitude toward Starbucks three marketing hashtags?"
+
+- "What is the relationship between users' sentiment of tweets and the tweets' popularity?"
+
+- "Whether there is a statistical difference between sentiment scores among those three different marketing hashtags and between retweet numbers?"
+
+Before answering those questions, let's look at the tweets' sentiment scores' distribution:
+
+## Sentiment Scores' Distribution for #Starbucks
+```{r}
+hist(score,xlab=" ",main="Sentiment Scores of 2000 sample tweets for Starbucks" ,
+     border="black",col="violet")
+```
+
+## Sentiment Scores' Distribution for #StarbucksForLife
+```{r}
+hist(score1,xlab=" ",main="Sentiment Scores of sample tweets for Starbucksforlife",
+     border="black",col="violet")
+```
+
+## Sentiment Scores' Distribution for #StarbucksAtHome
+```{r}
+hist(score2,xlab=" ",main="Sentiment Scores of sample tweets for Starbucksathome",
+     border="black",col="violet")
+```
+
+## Sentiment Scores' Distribution for #StarbucksGiveGood
+```{r}
+hist(score3,xlab=" ",main="Sentiment Scores of sample tweets for Starbucksgivegood",
+     border="black",col="violet")
+```
+
+## Hypothesis Testing 
+
+Null Hypothesis: People have a negative attitude toward Starbucks For Life. (i.e. Score = -1)
+```{r}
+alpha = 0.05
+mu0 = -1
+t1 = (mean(data1$score)- mu0)/(sd(data1$score)/sqrt(length(data1$score)))
+t1
+2* pt(-abs(t1),df=length(data1$score)-1)
+```
+
+## Hypothesis Testing 
+
+Null Hypothesis: People have a negative attitude toward Starbucks At Home.
+```{r}
+t2 = (mean(data2$score)- mu0)/(sd(data2$score)/sqrt(length(data2$score)))
+t2
+2* pt(-abs(t2),df=length(data2$score)-1)
+```
+
+## Hypothesis Testing 
+Null Hypothesis: People have a negative attitude toward Starbucks Give Good.
+
+```{r}
+t3 = (mean(data3$score)- mu0)/(sd(data3$score)/sqrt(length(data3$score)))
+t3
+2* pt(-abs(t3),df=length(data3$score)-1)
+```
+
+## analyze the relationship between sentiment and retweet number
+```{r}
+aov.out = aov(total$retweet_count~total$score,data=total)
+summary(aov.out)
+```
+
+## Generate a linear Model
+```{r}
+model = lm(total$retweet_count~total$score)
+summary(model)
+```
+
+## Plot the Linear Regression
+```{r}
+ggplot(data=total,aes(x=score,y=retweet_count)) +
+  geom_point() +
+  geom_smooth(method="lm") +
+  scale_y_continuous(limits=c(0,6000))
+```
+
+## Get the Summary of Total Score for three hashtags
+```{r}
+data1$hashtag =rep("starbucksforlife",454)
+data2$hashtag = rep("starbucksathome",220)
+data3$hashtag=rep("starbucksgivegood",313)
+d4 = rbind(data1,data2,data3)
+scoretotal = na.omit(d4$score)
+summary(scoretotal)
+```
+
+## Get the Summary of Total Retweet Numbers
+```{r}
+retweet = total$retweet_count
+summary(retweet)
+```
+
+## Get the Summary of Total Favorite Count
+```{r}
+favorite = total$favorite_count
+summary(favorite)
+```
+
+## Look At the linear relationship
+```{r}
+results <- aov(total$retweet_count~factor(d4$hashtag), data =total)
+summary(results)
+summary.lm(results)
+```
+
+## Compare the score mean difference between the three hashtag groups 
+(i.e. "Starbucks For Life","Starbucks At Home", "Starbucks Give Good")
+```{r}
+results <- aov(total$score ~ factor(d4$hashtag), data =total)
+summary(results)
+summary.lm(results)
+```
+
+
+## III.  Mapping
+
+In order to visualize the sentiment scores in the context of location distributions of twitter users who tweet on those three topics. I am going to map based on the sentiment scores. The positive scores would be indicated by the red points and the negative scores would be indicated by the blue points. The absolute value of the sentiment scores would be shown by the size of the points on the map. 
+
+First, I created a U.S. map with the sentiment scores of all three hashtags. The map shows that the data are mostly scattered around California and East Coast. The map are generally covered by the red point, which means that customers hold a positive attitude toward Starbucks when they talk about those three topics. There are few blue point show on Inidana and Massachusetts. Thus, I will plot each topic's sentiment scores on the second U.S. map to see which topic has the largest number of negative scores.
+
+## Mapping with Sentiment Scores on US map
+
+![](~/Desktop/MA615/MA615UpdatedProject/US_map_total.png)
+
+## Mapping under Topic "Starbucks for Life"
+
+![](~/Desktop/MA615/MA615UpdatedProject/US_map_life.png)
+
+## Mapping under Topic "starbucks at Home"
+
+![](~/Desktop/MA615/MA615UpdatedProject/US_map_home.png)
+
+## Mapping under Topic "Starbucks give Good"
+
+![](~/Desktop/MA615/MA615UpdatedProject/US_map_give.png)
+
+ 
+
+## Sentiment across different locations
+
+![Los Angeles Sentiment Scores](~/Desktop/MA615/MA615UpdatedProject/LA_map.png)
+
+## Penn
+
+![Penn State Sentiment Scores](~/Desktop/MA615/MA615UpdatedProject/Penn_map.png)
+
+
+## Massachusettes
+
+![](~/Desktop/MA615/MA615UpdatedProject/MA_map.png)
+
+## New York
+
+![](~/Desktop/MA615/MA615UpdatedProject/NY_map.png)
+
+## Finding from Maps
+
+- Blue points showing on Los Angeles Map
+- Blue points showing on Peen and Massachussetes Maps 
+- New York sentiment scores are much higher (almost no blue point)
+- The sample size of data with local information is so small that there are too little points plotted on the map to reach any firm conclusion.
+
+
+## IV. Shiny
+
+- A navbar with all the graphs included
+
+- An interactive map to compare the retweet tweets in different regions
+
+## Navbar
+
+The screen shot of the NavBar look like this: 
+
+![](~/Desktop/MA615/MA615UpdatedProject/app1.png)
+
+Access this Navbar by this link: https://xuexiaoqian.shinyapps.io/app1/
+
+## Interactive Map
+
+The screen shot of the map look like this:
+
+![](~/Desktop/MA615/MA615UpdatedProject/app2.png)
+
+
+Access this interactive map by this link: https://xuexiaoqian.shinyapps.io/app1/
+
+## V. Future Improvements
+
+The initial sample I have chosen is 5000 tweets data. However, after selecting all the useful tweets with valid locations and english as the language, there are only around 2000 tweets available. Therefore, the sample size is too small to reach firm conclusions. In order to reach a firm conclusion about the Starbucks marketing perceptions, we should explore more data sets and not be limitted only by twitter and Google. 
+
+Also, there are definitely more marketing strategies used by Starbucks, for example, sustainability, international brand images, working environment and so on. Hence, I look forward to exploring more about customers' perceptions on those strategies in different platform and area. Please feel free to email me (xuexq@bu.edu) if you have any questions. Thank you for going through this exploration with me!
+
+## End 
